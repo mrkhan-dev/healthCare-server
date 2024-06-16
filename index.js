@@ -43,9 +43,22 @@ async function run() {
       const query = {email: users.email};
       const existingUser = await userCollection.findOne(query);
       if (existingUser) {
-        return res.send({message: "this user already exist"});
+        return res.send({message: "this user already exist", insertedId: null});
       }
       const result = await userCollection.insertOne(users);
+      res.send(result);
+    });
+
+    // get all users
+    app.get("/users", async (req, res) => {
+      const result = await userCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.get("/userInfo/:email", async (req, res) => {
+      const result = await userCollection
+        .find({email: req.params.email})
+        .toArray();
       res.send(result);
     });
 
