@@ -2,7 +2,7 @@ const express = require("express");
 const app = express();
 const cors = require("cors");
 require("dotenv").config();
-const {MongoClient, ServerApiVersion} = require("mongodb");
+const {MongoClient, ServerApiVersion, ObjectId} = require("mongodb");
 const port = process.env.PORT || 8000;
 
 // middleware
@@ -46,6 +46,32 @@ async function run() {
         return res.send({message: "this user already exist", insertedId: null});
       }
       const result = await userCollection.insertOne(users);
+      res.send(result);
+    });
+
+    // admin
+    app.patch("/users/admin/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = {_id: new ObjectId(id)};
+      const updatedDoc = {
+        $set: {
+          role: "admin",
+        },
+      };
+      const result = await userCollection.updateOne(filter, updatedDoc);
+      res.send(result);
+    });
+
+    // handle user status
+    app.patch("/users/status/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = {_id: new ObjectId(id)};
+      const updatedDoc = {
+        $set: {
+          status: "block",
+        },
+      };
+      const result = await userCollection.updateOne(filter, updatedDoc);
       res.send(result);
     });
 
