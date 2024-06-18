@@ -1,6 +1,7 @@
 const express = require("express");
 const app = express();
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const {MongoClient, ServerApiVersion, ObjectId} = require("mongodb");
 const port = process.env.PORT || 8000;
@@ -30,6 +31,15 @@ async function run() {
       .db("healthCareDB")
       .collection("upcomingTests");
     const userCollection = client.db("healthCareDB").collection("users");
+
+    // jwt
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: "1h",
+      });
+      res.send({token});
+    });
 
     // get upcoming test to homepage
     app.get("/upcomingTest", async (req, res) => {
