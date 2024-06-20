@@ -2,6 +2,7 @@ const express = require("express");
 const app = express();
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
+const bodyParser = require("body-parser");
 require("dotenv").config();
 const {MongoClient, ServerApiVersion, ObjectId} = require("mongodb");
 const port = process.env.PORT || 8000;
@@ -9,6 +10,7 @@ const port = process.env.PORT || 8000;
 // middleware
 app.use(cors());
 app.use(express.json());
+app.use(bodyParser.json());
 
 // mongodb connection
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.aeb0oh8.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -31,6 +33,7 @@ async function run() {
       .db("healthCareDB")
       .collection("upcomingTests");
     const userCollection = client.db("healthCareDB").collection("users");
+    const allTestCollection = client.db("healthCareDB").collection("allTests");
 
     // jwt
     app.post("/jwt", async (req, res) => {
@@ -39,6 +42,37 @@ async function run() {
         expiresIn: "1h",
       });
       res.send({token});
+    });
+
+    // jwt middlewares
+    const verifyToken = (req, res, next) => {
+      console.log("inside verify token", req.headers.authorization);
+      if (!req.headers.authorization) {
+        return res.status(401).send({message: "forbidden access"});
+      }
+      const token = req.headers.authorization.split(" ")[1];
+      jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+        if (err) {
+          return res.status(401).send({message: "forbidden access"});
+        }
+        req.decoded = decoded;
+        next();
+      });
+    };
+
+    // check admin
+    app.get("/users/admin/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      if (email !== req.decoded.email) {
+        return res.status(403).send({message: "unauthorized access"});
+      }
+      const query = {email: email};
+      const user = await userCollection.findOne(query);
+      let admin = false;
+      if (user) {
+        admin = user?.role === "admin";
+      }
+      res.send({admin});
     });
 
     // get upcoming test to homepage
@@ -59,7 +93,28 @@ async function run() {
       res.send(result);
     });
 
-    // admin
+    // post add test data
+    app.post("/addTest", async (req, res) => {
+      const newTest = req.body;
+      const result = await allTestCollection.insertOne(newTest);
+      res.send(result);
+    });
+
+    // get all test data
+    app.get("/allTests", async (req, res) => {
+      const result = await allTestCollection.find().toArray();
+      res.send(result);
+    });
+
+    // get single test data by id
+    app.get("/testDetails/:id", async (req, res) => {
+      const result = await allTestCollection.findOne({
+        _id: new ObjectId(req.params.id),
+      });
+      res.send(result);
+    });
+
+    // set admin
     app.patch("/users/admin/:id", async (req, res) => {
       const id = req.params.id;
       const filter = {_id: new ObjectId(id)};
@@ -86,7 +141,7 @@ async function run() {
     });
 
     // get all users
-    app.get("/users", async (req, res) => {
+    app.get("/users", verifyToken, async (req, res) => {
       const result = await userCollection.find().toArray();
       res.send(result);
     });
