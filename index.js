@@ -153,6 +153,32 @@ async function run() {
       res.send(result);
     });
 
+    // update test details
+    app.put("/updateTest/:id", async (req, res) => {
+      const query = {_id: new ObjectId(req.params.id)};
+      const test = req.body;
+      const testInfo = {
+        $set: {
+          testName: test.testName,
+          image: test.image,
+          slots: test.slots,
+          price: test.price,
+          date: test.date,
+          description: test.description,
+        },
+      };
+      const result = await allTestCollection.updateOne(query, testInfo);
+      res.send(result);
+    });
+
+    // delete test
+    app.delete("/test/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const result = await allTestCollection.deleteOne(query);
+      res.send(result);
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ping: 1});
     console.log(
