@@ -1,14 +1,23 @@
 const express = require("express");
 const app = express();
 const cors = require("cors");
+require("dotenv").config();
 const jwt = require("jsonwebtoken");
 const bodyParser = require("body-parser");
-require("dotenv").config();
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const {MongoClient, ServerApiVersion, ObjectId} = require("mongodb");
 const port = process.env.PORT || 8000;
 
 // middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "https://health-hub-a0fd0.web.app",
+      "https://health-hub-a0fd0.firebaseapp.com",
+    ],
+  })
+);
 app.use(express.json());
 app.use(bodyParser.json());
 
@@ -34,6 +43,7 @@ async function run() {
       .collection("upcomingTests");
     const userCollection = client.db("healthCareDB").collection("users");
     const allTestCollection = client.db("healthCareDB").collection("allTests");
+    const bookingCollection = client.db("healthCareDB").collection("bookings");
 
     // jwt
     app.post("/jwt", async (req, res) => {
@@ -60,6 +70,24 @@ async function run() {
       });
     };
 
+    // create-payment-intent
+    // app.post("/create-payment-intent", verifyToken, async (req, res) => {
+    //   const price = req.body.price;
+    //   const priceInCent = parseFloat(price) * 100;
+    //   if (!price || priceInCent < 1) return;
+    //   // generate clientSecret
+    //   const {client_secret} = await stripe.paymentIntents.create({
+    //     amount: priceInCent,
+    //     currency: "usd",
+    //     // In the latest version of the API, specifying the `automatic_payment_methods` parameter is optional because Stripe enables its functionality by default.
+    //     automatic_payment_methods: {
+    //       enabled: true,
+    //     },
+    //   });
+    //   // send client secret as response
+    //   res.send({clientSecret: client_secret});
+    // });
+
     // check admin
     app.get("/users/admin/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
@@ -73,6 +101,18 @@ async function run() {
         admin = user?.role === "admin";
       }
       res.send({admin});
+    });
+
+    // check status
+    app.get("/users/status/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = {email: email};
+      const user = await userCollection.findOne(query);
+      let block = false;
+      if (user) {
+        block = user?.status === "block";
+        res.send({block});
+      }
     });
 
     // get upcoming test to homepage
@@ -97,6 +137,30 @@ async function run() {
     app.post("/addTest", async (req, res) => {
       const newTest = req.body;
       const result = await allTestCollection.insertOne(newTest);
+      res.send(result);
+    });
+
+    // bookings
+    app.post("/bookings", async (req, res) => {
+      const booking = req.body;
+      const result = await bookingCollection.insertOne(booking);
+
+      // change availability
+      const testId = booking.testId;
+      const query = {_id: new ObjectId(testId)};
+      const updatedDoc = {
+        $inc: {slots: -1},
+      };
+
+      const updatedSlots = await allTestCollection.updateOne(query, updatedDoc);
+
+      res.send({result, updatedSlots});
+    });
+
+    app.get("/bookings/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = {email: email};
+      const result = await bookingCollection.find(query).toArray();
       res.send(result);
     });
 
@@ -164,7 +228,7 @@ async function run() {
           slots: test.slots,
           price: test.price,
           date: test.date,
-          description: test.description,
+          descriptions: test.descriptions,
         },
       };
       const result = await allTestCollection.updateOne(query, testInfo);
@@ -179,8 +243,16 @@ async function run() {
       res.send(result);
     });
 
+    // delete appointment
+    app.delete("/appointment/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const result = await bookingCollection.deleteOne(query);
+      res.send(result);
+    });
+
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ping: 1});
+    // await client.db("admin").command({ping: 1});
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
